@@ -1,0 +1,625 @@
+> miinhwa:
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Мировая помощь: интерактив по странам (OWID)</title>
+<meta name="description" content="Интерактивная визуализация данных Our World in Data: net foreign aid given по странам, с поиском, мультивыбором и лог/линейным масштабом." />
+
+<!-- D3 (для графика) и d3-dsv (надёжный CSV-парсер) -->
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-dsv@3"></script>
+
+<style>
+  :root{
+    --bg: #fff;
+    --panel: #f6f7fb;
+    --text: #111;
+    --muted:#6b7280;
+    --accent:#3b82f6;
+    --border:#e5e7eb;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0b0c0f;
+      --panel:#12141a;
+      --text:#e5e7eb;
+      --muted:#9ca3af;
+      --accent:#60a5fa;
+      --border:#222531;
+    }
+  }
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font:14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+  }
+  header{
+    padding:16px 20px; border-bottom:1px solid var(--border);
+    display:flex; gap:14px; align-items:center; flex-wrap:wrap;
+  }
+  header h1{font-size:18px; margin:0}
+  .badge{font-size:12px; color:var(--muted)}
+  .shell{
+    display:grid; grid-template-columns: 320px 1fr; gap:16px;
+    padding:16px; align-items:start;
+  }
+  @media (max-width: 900px){ .shell{ grid-template-columns: 1fr; } }
+
+  .panel{
+    background:var(--panel); border:1px solid var(--border); border-radius:12px;
+    padding:14px; box-shadow: 0 0 0 1px rgba(0,0,0,0.02) inset;
+  }
+  .panel h2{margin:0 0 8px 0; font-size:15px}
+  label{font-weight:600; display:block; margin:10px 0 6px}
+  input[type="text"], select, button, .chip{
+    border:1px solid var(--border); background:#fff0; color:var(--text);
+  }
+  input[type="text"], select{
+    width:100%; padding:10px 12px; border-radius:10px;
+    outline:none;
+  }
+  .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  .btn{
+    padding:8px 12px; border-radius:10px; cursor:pointer; transition: .15s ease;
+  }
+  .btn:hover{ border-color: var(--accent); color: var(--accent); }
+  .btn.primary{ background: var(--accent); color: #fff; border-color: transparent; }
+  .chips{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px}
+  .chip{padding:6px 10px; border-radius:999px; font-size:12px; cursor:pointer}
+  .chip.active{ background: var(--accent); color:#fff; border-color:transparent}
+  .hint{color:var(--muted); font-size:12px}
+  .small{font-size:12px; color:var(--muted)}
+  .split{display:flex; gap:8px}
+  .split>*{flex:1}
+
+  .chart-wrap{ position:relative; min-height: 360px; }
+  svg{ width:100%; height: 520px; }
+  .legend{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .legend .item{ display:flex; align-items:center; gap:6px; padding:4px 8px; border:1px solid var(--border); border-radius:999px; font-size:12px }
+  .swatch{ width:12px; height:12px; border-radius:2px; background:var(--accent); }
+
+  table{ width:100%; border-collapse: collapse; margin-top:8px; }
+  th, td{ border-bottom:1px solid var(--border); padding:8px; text-align:left; }
+  th{ font-size:12px; color:var(--muted); font-weight:600 }
+  tr:hover td{ background: rgba(99,102,241,0.05); }
+
+  footer{
+    padding:14px 20px; border-top:1px solid var(--border);
+    display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px;
+    color:var(--muted); font-size:12px;
+  }
+  .right{ text-align:right }
+  .toggle{
+    display:inline-flex; align-items:center; gap:8px; cursor:pointer; user-select:none;
+  }
+  .range{ display:flex; gap:8px; align-items:center }
+  .range input[type="range"]{ width:100% }
+  .pill{
+    border:1px solid var(--border); border-radius:999px; padding:4px 8px; font-size:12px;
+  }
+  a{ color: var(--accent); text-decoration: none; }
+  a:hover{ text-decoration: underline; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Мировая помощь: интерактив по странам</h1>
+  <span class="badge">Источник данных: Our World in Data</span>
+</header>
+
+<div class="shell">
+
+> miinhwa:
+<!-- Панель управления -->
+  <aside class="panel" id="controls">
+    <h2>Фильтры и поиск</h2>
+
+    <label for="search">Найти страну</label>
+    <input id="search" type="text" placeholder="Например: Korea, United States, Japan…" autocomplete="off" />
+
+    <div class="chips" id="searchResults" aria-live="polite"></div>
+
+    <label>Выбрано стран: <span id="countSelected">0</span></label>
+    <div class="chips" id="selectedChips"></div>
+
+    <div class="row" style="margin-top:10px">
+      <button class="btn" id="clear">Очистить</button>
+      <button class="btn" id="selectAllTop10">Топ-10 доноров (угадать)</button>
+    </div>
+
+    <label style="margin-top:14px">Быстрые пресеты</label>
+    <div class="chips" id="presets">
+      <span class="chip" data-preset="G7">G7</span>
+      <span class="chip" data-preset="Nordic">Nordic</span>
+      <span class="chip" data-preset="NEA">NE Asia</span>
+      <span class="chip" data-preset="EU">EU (выборочно)</span>
+    </div>
+
+    <label style="margin-top:14px">Масштаб</label>
+    <div class="row">
+      <span class="pill"><input type="radio" name="scale" id="scaleLinear" checked> <label for="scaleLinear">Линейный</label></span>
+      <span class="pill"><input type="radio" name="scale" id="scaleLog"> <label for="scaleLog">Логарифмический</label></span>
+    </div>
+
+    <label style="margin-top:14px">Диапазон лет</label>
+    <div class="range">
+      <span class="small" id="yearMinLbl">1960</span>
+      <input id="yearMin" type="range" min="1960" max="2025" step="1" value="1990">
+      <input id="yearMax" type="range" min="1960" max="2025" step="1" value="2025">
+      <span class="small" id="yearMaxLbl">2025</span>
+    </div>
+    <div class="hint">Двигая бегунки, ограничьте годы на графике.</div>
+
+    <div class="row" style="margin-top:14px">
+      <button class="btn primary" id="apply">Применить</button>
+      <button class="btn" id="share">Ссылка на этот вид</button>
+    </div>
+
+    <p class="hint" style="margin-top:10px">
+      Подсказка: кликай по цветным чипам стран, чтобы добавлять/удалять.
+    </p>
+  </aside>
+
+  <!-- График и таблица -->
+  <main class="panel">
+    <h2>График: Net foreign aid given (текущие USD)</h2>
+    <div class="chart-wrap">
+      <svg id="chart" role="img" aria-label="Линейный график по выбранным странам"></svg>
+    </div>
+
+    <div class="legend" id="legend"></div>
+
+    <h2 style="margin-top:16px">Таблица значений (текущий год срез)</h2>
+    <div class="row small">
+      <span>Год: <strong id="tableYear">—</strong></span>
+      <span style="margin-left:auto">Сортировка: 
+        <select id="sortMode">
+          <option value="valueDesc">По значению ↓</option>
+          <option value="valueAsc">По значению ↑</option>
+          <option value="nameAsc">По названию A→Z</option>
+        </select>
+      </span>
+    </div>
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th>Страна</th>
+          <th>Код</th>
+          <th>Значение (USD)</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </main>
+</div>
+
+<footer>
+  <div>
+    Данные: Our World in Data, набор <a href="https://ourworldindata.org/grapher/foreign-aid-given-net" target="_blank" rel="noopener">foreign-aid-given-net</a>.  
+    Лицензия: обычно CC BY (см. страницу источника).
+  </div>
+  <div class="right">
+    Сделано для GitHub Pages · Без серверной части
+  </div>
+</footer>
+
+<script>
+(async function(){
+  // --------- Константы и утилиты ----------
+  const DATA_URL = "https://ourworldindata.org/grapher/foreign-aid-given-net.csv";
+  const $ = (sel, root=document) => root.querySelector(sel);
+  const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+  const fmt = d3.format(",.0f");
+  const fmtSI = d3.format(".2s");
+  const state = {
+    data: [],        // исходные строки
+    series: new Map(), // code => [{year, value}], name на series.name
+    codes: [],       // все доступные коды стран
+    names: new Map(),// code => country
+    selected: new Set(), // выбранные коды
+    yearsAll: [1960, 2025],
+    yearMin: 1990,
+    yearMax: 2025,
+scale: "linear" // or "log"
+  };
+
+  // Псевдо-пресеты
+  const PRESETS = {
+    G7: ["USA","GBR","FRA","DEU","ITA","CAN","JPN"],
+    Nordic: ["SWE","NOR","DNK","FIN","ISL"].filter(Boolean),
+    NEA: ["KOR","JPN","CHN","TWN","HKG","SGP"],
+    EU: ["DEU","FRA","ITA","ESP","NLD","SWE","DNK"]
+  };
+
+  // --------- Загрузка и подготовка данных ----------
+  const rawText = await fetch(DATA_URL, {cache:"no-store"}).then(r=>r.text());
+  const rows = d3.csvParse(rawText);
+  // Определим имя числовой метрики (последний столбец надёжен, но обычно колонка называется "foreign-aid-given-net")
+  const numericCol = rows.columns.filter(c => !["Entity","Code","Year"].includes(c)).at(-1);
+
+  // Преобразуем в серии по коду
+  const series = new Map();
+  const names = new Map();
+  const codes = new Set();
+  let minYear=Infinity, maxYear=-Infinity;
+
+  rows.forEach(r=>{
+    const country = r.Entity;
+    const code = r.Code;
+    const year = +r.Year;
+    const value = r[numericCol] ? +r[numericCol] : NaN;
+    if(!code!Number.isFinite(year)) return;
+
+    names.set(code, country);
+    codes.add(code);
+    minYear = Math.min(minYear, year);
+    maxYear = Math.max(maxYear, year);
+
+    if(!series.has(code)) series.set(code, []);
+    if(Number.isFinite(value)){
+      series.get(code).push({year, value});
+    }
+  });
+
+  // Отсортируем внутри серий по годам
+  for(const [code, arr] of series){
+    arr.sort((a,b)=>a.year-b.year);
+    arr.name = names.get(code);
+  }
+
+  Object.assign(state, {
+    data: rows,
+    series,
+    codes: Array.from(codes),
+    names,
+    yearsAll: [minYear, maxYear],
+    yearMin: Math.max(minYear, 1990),
+    yearMax: maxYear
+  });
+
+  // --------- Элементы управления ----------
+  const search = $("#search");
+  const searchResults = $("#searchResults");
+  const selectedChips = $("#selectedChips");
+  const countSelected = $("#countSelected");
+  const yearMinInput = $("#yearMin");
+  const yearMaxInput = $("#yearMax");
+  const yearMinLbl = $("#yearMinLbl");
+  const yearMaxLbl = $("#yearMaxLbl");
+  const scaleLinear = $("#scaleLinear");
+  const scaleLog = $("#scaleLog");
+  const sortMode = $("#sortMode");
+  const tableYear = $("#tableYear");
+
+  // Установим границы ползунков по настоящим данным
+  yearMinInput.min = state.yearsAll[0];
+  yearMinInput.max = state.yearsAll[1];
+  yearMaxInput.min = state.yearsAll[0];
+  yearMaxInput.max = state.yearsAll[1];
+  yearMinInput.value = state.yearMin;
+  yearMaxInput.value = state.yearMax;
+  yearMinLbl.textContent = state.yearMin;
+  yearMaxLbl.textContent = state.yearMax;
+
+  // --------- Цветовая шкала для серий ----------
+  const color = d3.scaleOrdinal(d3.schemeTableau10);
+
+  // --------- Парсим состояние из URL (если есть) ----------
+  function loadFromURL(){
+    const p = new URLSearchParams(location.search);
+    const cs = (p.get("countries")||"").split(",").map(s=>s.trim()).filter(Boolean);
+    const y0 = +p.get("start") || state.yearMin;
+    const y1 = +p.get("end")   || state.yearMax;
+    const sc = (p.get("scale")||"linear");
+    if(cs.length) cs.forEach(c=>state.selected.add(c));
+    state.yearMin = Math.max(state.yearsAll[0], Math.min(y0, state.yearsAll[1]));
+    state.yearMax = Math.max(state.yearsAll[0], Math.min(y1, state.yearsAll[1]));
+    state.scale = (sc==="log")?"log":"linear";
+
+    // Применим к UI:
+    yearMinInput.value = state.yearMin; yearMinLbl.textContent = state.yearMin;
+    yearMaxInput.value = state.yearMax; yearMaxLbl.textContent = state.yearMax;
+    (state.scale==="log"?scaleLog:scaleLinear).checked = true;
+  }
+  loadFromURL();
+
+  // --------- Рендер UI: выбранные и результаты поиска ----------
+  function renderSelected(){
+    selectedChips.innerHTML = "";
+    state.selected.forEach(code=>{
+      const el = document.createElement("span");
+      el.className = "chip active";
+      el.textContent = ${state.names.get(code)||code};
+      el.title = code + " • клик — убрать";
+      el.onclick = () => { state.selected.delete(code); renderAll(); };
+      selectedChips.appendChild(el);
+    });
+    countSelected.textContent = state.selected.size;
+  }
+  > miinhwa:
+function renderSearchResults(q=""){
+    searchResults.innerHTML = "";
+    const ql = q.trim().toLowerCase();
+    if(!ql){ return; }
+
+    const matches = state.codes
+      .map(code => ({code, name: state.names.get(code)}))
+      .filter(d => d.name.toLowerCase().includes(ql) || d.code.toLowerCase().includes(ql))
+      .slice(0, 20);
+
+    matches.forEach(d=>{
+      const el = document.createElement("span");
+      el.className = "chip";
+      el.textContent = ${d.name} (${d.code});
+      el.title = "Добавить в выбор";
+      el.onclick = () => { state.selected.add(d.code); search.value=""; renderAll(); };
+      searchResults.appendChild(el);
+    });
+  }
+
+  search.addEventListener("input", d3.debounce(()=>renderSearchResults(search.value), 120));
+
+  $("#clear").onclick = () => { state.selected.clear(); renderAll(); };
+
+  $("#selectAllTop10").onclick = () => {
+    // Эвристика: возьмём последнюю доступную дату и выберем топ-10 значений
+    const lastYear = state.yearMax;
+    const top = Array.from(state.series).map(([code, arr])=>{
+      const last = arr.filter(d=>d.year===lastYear).at(0)⠞⠺⠵⠞⠺⠺⠟⠞⠵⠺⠵⠵⠞⠟{value:0};
+      return {code, value: last.value||0};
+    }).sort((a,b)=>b.value-a.value).slice(0,10);
+    state.selected = new Set(top.map(d=>d.code));
+    renderAll();
+  };
+
+  $("#presets").addEventListener("click", (e)=>{
+    const chip = e.target.closest(".chip"); if(!chip) return;
+    const key = chip.dataset.preset;
+    const list = PRESETS[key] || [];
+    list.forEach(c=>state.selected.add(c));
+    renderAll();
+  });
+
+  scaleLinear.addEventListener("change", ()=>{ if(scaleLinear.checked){ state.scale="linear"; renderChart(); }});
+  scaleLog.addEventListener("change", ()=>{ if(scaleLog.checked){ state.scale="log"; renderChart(); }});
+
+  yearMinInput.addEventListener("input", ()=>{
+    let v = +yearMinInput.value;
+    if(v > +yearMaxInput.value) v = +yearMaxInput.value;
+    state.yearMin = v; yearMinLbl.textContent = v;
+    renderChart(); renderTable();
+  });
+  yearMaxInput.addEventListener("input", ()=>{
+    let v = +yearMaxInput.value;
+    if(v < +yearMinInput.value) v = +yearMinInput.value;
+    state.yearMax = v; yearMaxLbl.textContent = v;
+    renderChart(); renderTable();
+  });
+
+  $("#apply").onclick = ()=>{ renderAll(); };
+  $("#share").onclick = ()=>{
+    const params = new URLSearchParams();
+    if(state.selected.size) params.set("countries", Array.from(state.selected).join(","));
+    params.set("start", state.yearMin);
+    params.set("end", state.yearMax);
+    params.set("scale", state.scale==="log"?"log":"linear");
+    const url = location.origin + location.pathname + "?" + params.toString();
+    navigator.clipboard?.writeText(url);
+    alert("Ссылка на этот вид скопирована в буфер обмена:\n\n" + url);
+  };
+
+  // --------- График ----------
+  const svg = d3.select("#chart");
+  const g = svg.append("g");
+  const margin = {top: 20, right: 20, bottom: 36, left: 64};
+
+  function getInnerSize(){
+    const node = svg.node();
+    const width = node.clientWidth || 900;
+    const height = node.clientHeight || 520;
+    return {width, height, iw: width - margin.left - margin.right, ih: height - margin.top - margin.bottom};
+  }
+
+  function renderChart(){
+    const {width, height, iw, ih} = getInnerSize();
+    svg.attr("viewBox", `0 0 ${width} ${height}`);
+    g.attr("transform", `translate(${margin.left},${margin.top})`);
+    g.selectAll("*").remove();
+
+    // Данные для рисования — фильтруем по выбранным и по годам
+    const selectedSeries = Array.from(state.selected).map(code => {
+      const arr = (state.series.get(code)||[]).filter(d=>d.year>=state.yearMin && d.year<=state.yearMax);
+      return {code, name: state.names.get(code), values: arr};
+    }).filter(s=>s.values.length>0);
+
+    // Осевые
+    const x = d3.scaleLinear()
+      .domain([state.yearMin, state.yearMax])
+      .range([0, iw]);
+
+    // Найдём общий min/max по значениям для оси Y
+    let yMin = 0, yMax = 0;
+    selectedSeries.forEach(s=>{
+      s.values.forEach(d=>{
+        if(Number.isFinite(d.value)){
+          yMin = Math.min(yMin, d.value);
+
+> miinhwa:
+yMax = Math.max(yMax, d.value);
+        }
+      })
+    });
+    if(yMax<=0){ yMax = 1; } // защита
+
+    const y = (state.scale==="log")
+      ? d3.scaleLog().clamp(true).domain([Math.max(1, yMin||1), yMax]).range([ih,0]).nice()
+      : d3.scaleLinear().domain([0, yMax]).range([ih,0]).nice();
+
+    // Сетка
+    g.append("g")
+      .attr("stroke", "currentColor").attr("opacity", 0.08)
+      .selectAll("line")
+      .data(y.ticks(6))
+      .join("line")
+      .attr("x1", 0).attr("x2", iw)
+      .attr("y1", d=>y(d)).attr("y2", d=>y(d));
+
+    // Оси
+    g.append("g").attr("transform", `translate(0,${ih})`).call(d3.axisBottom(x).ticks(Math.min(10, state.yearMax-state.yearMin)));
+    g.append("g").call(
+      (state.scale==="log" ? d3.axisLeft(y).ticks(6, "~s") : d3.axisLeft(y).ticks(6, "~s"))
+    );
+
+    // Линии
+    const line = d3.line()
+      .defined(d => Number.isFinite(d.value) && d.value>0 || (state.scale!=="log" && Number.isFinite(d.value)))
+      .x(d => x(d.year))
+      .y(d => y(Math.max(state.scale==="log"?1:0, d.value)));
+
+    const seriesG = g.append("g");
+    selectedSeries.forEach((s,i)=>{
+      const c = color(s.code);
+      seriesG.append("path")
+        .attr("fill","none")
+        .attr("stroke", c)
+        .attr("stroke-width", 2)
+        .attr("d", line(s.values));
+    });
+
+    // Ховер по ближайшей точке
+    const overlay = g.append("rect").attr("fill","transparent").attr("pointer-events","all")
+      .attr("x",0).attr("y",0).attr("width",iw).attr("height",ih);
+
+    const focus = g.append("g").style("display","none");
+    focus.append("line").attr("class","hover-line")
+      .attr("stroke","currentColor").attr("stroke-opacity",0.2).attr("y1",0).attr("y2",ih);
+    const dots = focus.append("g");
+    const tooltip = d3.select("body").append("div")
+      .style("position","fixed").style("pointer-events","none").style("background","var(--panel)")
+      .style("border","1px solid var(--border)").style("border-radius","8px").style("padding","8px 10px")
+      .style("font-size","12px").style("color","var(--text)").style("display","none");
+
+    overlay.on("mousemove", (event)=>{
+      const [mx, my] = d3.pointer(event);
+      const year = Math.round(x.invert(mx));
+      const clampedYear = Math.max(state.yearMin, Math.min(year, state.yearMax));
+      focus.style("display",null);
+      focus.select(".hover-line").attr("transform", `translate(${x(clampedYear)},0)`);
+
+      // Найдём значения в этот год
+      const rows = selectedSeries.map(s=>{
+        // линейный поиск ближайшего года
+        let best = null, bestDist=1e9;
+        for(const d of s.values){
+          const dist = Math.abs(d.year - clampedYear);
+          if(dist < bestDist){ best = d; bestDist = dist; }
+        }
+        return {name: s.name, code: s.code, year: best?.year, value: best?.value ?? NaN};
+      }).filter(r=>Number.isFinite(r.value));
+
+      // точки
+      dots.selectAll("*").remove();
+      rows.forEach(r=>{
+        dots.append("circle").attr("r",3.8).attr("fill", color(r.code))
+          .attr("cx", x(r.year)).attr("cy", y(Math.max(state.scale==="log"?1:0, r.value)));
+      });
+
+      // тултип
+      const html = <div style="font-weight:600;margin-bottom:4px">${clampedYear}</div> +
+        rows.sort((a,b)=>b.value-a.value).slice(0,12).map(r=>
+          <div><span style="display:inline-block;width:10px;height:10px;background:${color(r.code)};margin-right:6px;border-radius:2px"></span>${r.name}: <b>${fmt(r.value)}</b></div>
+        ).join("");
+      tooltip.html(html).style("display","block")
+        .style("left", (event.clientX + 14) + "px")
+        .style("top",  (event.clientY + 14) + "px");
+
+      // год для таблицы
+      tableYear.textContent = clampedYear;
+      renderTable(clampedYear);
+    }).on("mouseleave", ()=>{
+      focus.style("display","none");
+      tooltip.style("display","none");
+    });
+
+    // Легенда
+    const legend = $("#legend");
+    legend.innerHTML = "";
+    selectedSeries.forEach(s=>{
+      const el = document.createElement("div");
+      el.className = "item";
+      el.
+
+> miinhwa:
+innerHTML = <span class="swatch" style="background:${color(s.code)}"></span> ${s.name};
+      el.onclick = ()=>{ // клик — выключатель
+        if(state.selected.has(s.code)){ state.selected.delete(s.code); } else { state.selected.add(s.code); }
+        renderAll();
+      };
+      legend.appendChild(el);
+    });
+  }
+
+  // --------- Таблица (срез по году) ----------
+  function renderTable(year = state.yearMax){
+    const tbody = $("#tbl tbody");
+    tbody.innerHTML = "";
+    const rows = Array.from(state.selected).map(code=>{
+      const arr = state.series.get(code)||[];
+      // Берём точное попадание или ближайший год в диапазоне
+      let best = null, bestDist = 1e9;
+      arr.forEach(d=>{
+        if(d.year < state.yearMin || d.year > state.yearMax) return;
+        const dist = Math.abs(d.year - year);
+        if(dist < bestDist){ best = d; bestDist = dist; }
+      });
+      return {
+        code,
+        name: state.names.get(code) || code,
+        value: best?.value ?? NaN
+      };
+    }).filter(r=>Number.isFinite(r.value));
+
+    const mode = sortMode.value;
+    rows.sort((a,b)=>{
+      if(mode==="valueDesc") return b.value - a.value;
+      if(mode==="valueAsc") return a.value - b.value;
+      return a.name.localeCompare(b.name);
+    });
+
+    rows.forEach(r=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = <td>${r.name}</td><td>${r.code}</td><td>${fmt(r.value)}</td>;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // --------- Общий рендер ----------
+  function renderAll(){
+    renderSelected();
+    renderSearchResults(""); // скрыть подсказки
+    renderChart();
+    renderTable();
+
+    // обновим URL (без перезагрузки)
+    const params = new URLSearchParams();
+    if(state.selected.size) params.set("countries", Array.from(state.selected).join(","));
+    params.set("start", state.yearMin);
+    params.set("end", state.yearMax);
+    params.set("scale", state.scale==="log"?"log":"linear");
+    history.replaceState(null, "", "?" + params.toString());
+  }
+
+  // --------- Начальная выборка (немного стран, чтобы было видно график) ----------
+  if(state.selected.size===0){
+    ["KOR","USA","JPN","GBR","FRA","DEU"].forEach(c=>state.selected.add(c));
+  }
+  renderAll();
+
+  // --------- Адаптация к ресайзу ----------
+  window.addEventListener("resize", d3.debounce(renderChart, 100));
+})();
+</script>
+</body>
+</html>
