@@ -8,10 +8,10 @@
 <style>
   :root {
     --bg: #ffffff;
-    --panel: #f8f9fa;
+    --panel: #f9fafb;
     --text: #111111;
     --muted: #555555;
-    --border: #dcdcdc;
+    --border: #e5e7eb;
     --accent: #2563eb;
   }
   body {
@@ -54,7 +54,7 @@
     transition: all .15s;
   }
   .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
-  .btn:hover { background:#f1f5f9 }
+  .btn:hover { background:#f3f4f6 }
   .btn.primary:hover { background:#1d4ed8 }
   #map { width:100%; height:440px; display:block; background:#eef2f7; border-radius:8px; }
   table { width:100%; border-collapse:collapse; margin-top:10px; font-size:13px; }
@@ -74,7 +74,7 @@
 <body>
   <div style="padding:14px 18px; border-bottom:1px solid var(--border); background:#f8fafc">
     <h1>Foreign Aid Visualization</h1>
-    <div class="hint">Data: OWID / OECD (constant 2022 USD). Upload CSV if auto-load fails.</div>
+    <div class="hint">Data: OECD / Our World in Data (constant 2022 USD).</div>
   </div>
 
   <div class="wrap">
@@ -86,7 +86,7 @@
         <button id="reloadBtn" class="btn">Reload</button>
       </div>
       <div id="loadHint" class="hint" style="margin-top:8px">
-        Trying auto-load from <code>foreign-aid-given-net.csv</code>.
+        Attempting auto-load from <code>foreign-aid-given-net.csv</code>.
       </div>
 
       <label>Year</label>
@@ -96,7 +96,7 @@
       </div>
 
       <label>Search Country</label>
-      <input id="countrySearch" type="text" placeholder="Korea, United States, JPN…" />
+      <input id="countrySearch" type="text" placeholder="Type a country or code…" />
 
       <div class="row" style="margin-top:8px">
         <button id="resetBtn" class="btn">Reset</button>
@@ -109,7 +109,7 @@
       <h3>World Map — Selected Year</h3>
       <svg id="map" viewBox="0 0 800 440" preserveAspectRatio="xMidYMid meet"></svg>
 
-      <h3 style="margin-top:16px">Country Table</h3>
+      <h3 style="margin-top:16px">All Entities (Table)</h3>
       <div id="tableWrap" style="max-height:300px; overflow:auto"></div>
     </main>
   </div>
@@ -122,11 +122,12 @@
   const GEOJSON_URL = "https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson";
 
   const $ = sel => document.querySelector(sel);
-  const yearRange = $("#yearRange"), yearLabel=$("#yearLabel");
+  const yearRange=$("#yearRange"), yearLabel=$("#yearLabel");
   const tableWrap=$("#tableWrap"), tooltip=d3.select("#tooltip");
+  const countrySearch=$("#countrySearch");
 
   let rows=[], columns=[], numericCol=null;
-  let geojson=null, years=[], dataByYear=new Map(), countryLookup=new Map();
+  let geojson=null, years=[], dataByYear=new Map(), entityLookup=new Map();
 
   // load CSV
   async function loadCsv(auto=true){
@@ -157,7 +158,7 @@
     rows.forEach(r=>{
       if(!dataByYear.has(r.Year)) dataByYear.set(r.Year,new Map());
       dataByYear.get(r.Year).set(r.Code.toUpperCase(),r.Value);
-      countryLookup.set(r.Code.toUpperCase(),r.Entity);
+      entityLookup.set(r.Code.toUpperCase(),r.Entity);
     });
     yearRange.min=years[0]; yearRange.max=years.at(-1); yearRange.value=years.at(-1);
     yearLabel.textContent=yearRange.value;
@@ -177,11 +178,11 @@
 
   function renderTable(year){
     const mapY=dataByYear.get(year)||new Map();
-    const arr=Array.from(countryLookup.entries()).map(([c,n])=>({code:c,name:n,value:mapY.get(c)}));
+    const arr=Array.from(entityLookup.entries()).map(([c,n])=>({code:c,name:n,value:mapY.get(c)}));
     arr.sort((a,b)=>(b.value||0)-(a.value||0));
     tableWrap.innerHTML="";
     const table=document.createElement("table");
-    table.innerHTML=`<thead><tr><th>#</th><th>Country</th><th>Code</th><th style="text-align:right">Value</th></tr></thead>`;
+    table.innerHTML=`<thead><tr><th>#</th><th>Entity</th><th>Code</th><th style="text-align:right">Value</th></tr></thead>`;
     const tb=document.createElement("tbody");
     arr.forEach((d,i)=>{
       const tr=document.createElement("tr");
@@ -194,8 +195,12 @@
   function renderMap(year){
     if(!geojson) return;
     const mapY=dataByYear.get(year)||new Map();
-    const values=Array.from(mapY.values()).filter(v=>isFinite(v)&&v>0);
-    const color=d3.scaleSequential(d3.interpolateBlues).domain([Math.log1p(d3.min(values)||1),Math.log1p(d3.max(values)||10)]);
+    const values=[];
+    for(const [code,val] of mapY.entries()){
+      if(isFinite(val)&&/^[A-Z]{3}$/.test(code)) values.push(val);
+    }
+    const color=d3.scaleSequential(d3.interpolateBlues)
+      .domain([Math.log1p(d3.min(values)||1),Math.log1p(d3.max(values)||10)]);
     const projection=d3.geoNaturalEarth1().fitSize([800,440],geojson);
     const path=d3.geoPath(projection);
     const svg=d3.select("#map"); svg.selectAll("*").remove();
@@ -204,12 +209,12 @@
       .attr("fill",f=>{
         const iso=(f.properties.ISO_A3||"").toUpperCase();
         const val=mapY.get(iso);
-        return isFinite(val)&&val>0?color(Math.log1p(val)):"#e5e7eb";
+        return isFinite(val)?color(Math.log1p(val)):"#e5e7eb";
       })
-      .attr("stroke","#555").attr("stroke-width",0.4)
+      .attr("stroke","#444").attr("stroke-width",0.4)
       .on("mousemove",(ev,f)=>{
         const iso=(f.properties.ISO_A3||"").toUpperCase();
-        const name=f.properties.ADMIN||countryLookup.get(iso)||iso;
+        const name=f.properties.ADMIN||entityLookup.get(iso)||iso;
         const val=mapY.get(iso);
         tooltip.style("display","block").style("left",(ev.pageX+12)+"px").style("top",(ev.pageY+12)+"px")
           .html(`<strong>${name}</strong><br/>${iso}: ${isFinite(val)?d3.format(",")(val):"no data"}`);
@@ -217,14 +222,43 @@
       .on("mouseout",()=>tooltip.style("display","none"));
   }
 
-  // UI events
+  // UI
   yearRange.addEventListener("input",updateAll);
   $("#reloadBtn").addEventListener("click",()=>location.reload());
   $("#fileInput").addEventListener("change",()=>loadCsv(false));
+  $("#resetBtn").addEventListener("click",()=>{ countrySearch.value=""; updateAll(); });
+  $("#top10Btn").addEventListener("click",()=>{
+    const year=+yearRange.value;
+    const arr=Array.from(entityLookup.keys()).map(c=>({code:c,val:dataByYear.get(year)?.get(c)||0}));
+    arr.sort((a,b)=>b.val-a.val);
+    alert("Top 10 codes:\n"+arr.slice(0,10).map(d=>d.code).join(", "));
+  });
+  countrySearch.addEventListener("input",()=>{
+    const q=countrySearch.value.trim().toLowerCase();
+    if(!q){ updateAll(); return; }
+    const year=+yearRange.value;
+    const mapY=dataByYear.get(year)||new Map();
+    const matched=[];
+    for(const [code,name] of entityLookup.entries()){
+      if((name||"").toLowerCase().includes(q)||code.toLowerCase().includes(q)){
+        matched.push({code,name,value:mapY.get(code)});
+      }
+    }
+    matched.sort((a,b)=>(b.value||0)-(a.value||0));
+    tableWrap.innerHTML="";
+    const table=document.createElement("table");
+    table.innerHTML=`<thead><tr><th>#</th><th>Entity</th><th>Code</th><th style="text-align:right">Value</th></tr></thead>`;
+    const tb=document.createElement("tbody");
+    matched.forEach((d,i)=>{
+      const tr=document.createElement("tr");
+      tr.innerHTML=`<td>${i+1}</td><td>${d.name}</td><td>${d.code}</td><td style="text-align:right">${isFinite(d.value)?d3.format(",")(d.value):"-"}</td>`;
+      tb.appendChild(tr);
+    });
+    table.appendChild(tb); tableWrap.appendChild(table);
+  });
 
   loadCsv(true);
 })();
 </script>
 </body>
 </html>
-
