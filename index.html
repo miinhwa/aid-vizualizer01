@@ -1,81 +1,116 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Foreign aid — таблица и мировая карта</title>
+<title>Foreign Aid Visualization</title>
 <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
 <style>
-  :root{--bg:#0b0c0f; --panel:#12141a; --text:#e5e7eb; --muted:#9ca3af; --border:#222531; --accent:#60a5fa;}
-  body{margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;}
-  .wrap{display:grid; grid-template-columns:360px 1fr; gap:14px; padding:16px;}
+  :root {
+    --bg: #ffffff;
+    --panel: #f8f9fa;
+    --text: #111111;
+    --muted: #555555;
+    --border: #dcdcdc;
+    --accent: #2563eb;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 "Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  }
+  h1, h3 { margin: 6px 0 10px; font-weight: 600; }
+  .wrap {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 16px;
+    padding: 16px;
+  }
   @media(max-width:900px){ .wrap{grid-template-columns:1fr} }
-  .panel{background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:12px;}
-  h1{margin:6px 0 10px; font-size:18px}
-  label{font-weight:600; display:block; margin:8px 0 6px}
-  input[type="file"]{color:var(--muted)}
-  .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
-  .btn{padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:transparent; color:var(--text); cursor:pointer}
-  .btn.primary{background:var(--accent); color:#001018; border-color:transparent}
-  #map, #chartSvg{width:100%; height:420px; display:block; background:transparent}
-  table{width:100%; border-collapse:collapse; margin-top:8px; font-size:13px}
-  th,td{padding:6px 8px; border-bottom:1px solid rgba(255,255,255,0.03)}
-  th{position:sticky; top:0; background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0))}
-  .hint{color:var(--muted); font-size:13px}
-  #tooltip{position:fixed; pointer-events:none; background:#fff; color:#000; padding:6px 8px; border-radius:6px; font-size:13px; display:none; box-shadow:0 6px 18px rgba(0,0,0,0.5)}
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+  label { font-weight: 600; display:block; margin:10px 0 6px }
+  input[type="file"], input[type="text"], input[type="range"], .btn {
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:8px 10px;
+    font-size:14px;
+  }
+  input[type="file"], input[type="text"], input[type="range"] {
+    width:100%;
+    background:#fff;
+    color:var(--text);
+  }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap }
+  .btn {
+    background:#fff;
+    cursor:pointer;
+    transition: all .15s;
+  }
+  .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .btn:hover { background:#f1f5f9 }
+  .btn.primary:hover { background:#1d4ed8 }
+  #map { width:100%; height:440px; display:block; background:#eef2f7; border-radius:8px; }
+  table { width:100%; border-collapse:collapse; margin-top:10px; font-size:13px; }
+  th,td { padding:8px 10px; border-bottom:1px solid #e5e7eb; }
+  th { background:#f1f5f9; text-align:left; font-weight:600; }
+  tr:nth-child(even){ background:#fafafa; }
+  tr:hover{ background:#f0f9ff; }
+  .hint { color:var(--muted); font-size:12px }
+  #tooltip {
+    position:fixed; pointer-events:none;
+    background:#fff; color:#111; padding:8px 10px;
+    border-radius:6px; font-size:13px;
+    display:none; box-shadow:0 4px 12px rgba(0,0,0,0.15);
+  }
 </style>
 </head>
 <body>
-  <div style="padding:12px 16px; border-bottom:1px solid rgba(255,255,255,0.03)">
-    <h1>Foreign aid given — таблица + мировая карта</h1>
-    <div class="hint">Данные: Our World in Data / OECD (constant 2022 US$). Если CSV не доступен через fetch, используйте кнопку «Загрузить CSV». </div>
+  <div style="padding:14px 18px; border-bottom:1px solid var(--border); background:#f8fafc">
+    <h1>Foreign Aid Visualization</h1>
+    <div class="hint">Data: OWID / OECD (constant 2022 USD). Upload CSV if auto-load fails.</div>
   </div>
 
   <div class="wrap">
-    <!-- Панель управления -->
-    <aside class="panel" style="min-height:420px">
-      <label>CSV (авто: <code>foreign-aid-given-net.csv</code>)</label>
+    <!-- Control Panel -->
+    <aside class="panel">
+      <label>CSV Input</label>
       <div class="row">
         <input id="fileInput" type="file" accept=".csv" />
-        <button id="reloadBtn" class="btn">Перезагрузить</button>
+        <button id="reloadBtn" class="btn">Reload</button>
       </div>
-      <div id="loadHint" class="hint" style="margin-top:8px">Попробую загрузить <code>foreign-aid-given-net.csv</code> автоматически. Если не получается — выберите файл вручную.</div>
+      <div id="loadHint" class="hint" style="margin-top:8px">
+        Trying auto-load from <code>foreign-aid-given-net.csv</code>.
+      </div>
 
-      <label style="margin-top:10px">Год</label>
+      <label>Year</label>
       <div class="row">
-        <input id="yearRange" type="range" min="1960" max="2025" step="1" value="2023" style="flex:1" />
+        <input id="yearRange" type="range" min="1960" max="2025" step="1" value="2023" />
         <div id="yearLabel" style="width:68px; text-align:center">—</div>
       </div>
 
-      <label style="margin-top:8px">Поиск страны</label>
-      <input id="countrySearch" type="text" placeholder="Например: Korea, United States, JPN…" style="width:100%; padding:8px; border-radius:8px; border:1px solid var(--border); background:transparent; color:var(--text)"/>
-      <div style="margin-top:8px" class="row">
-        <button id="resetBtn" class="btn">Сброс</button>
-        <button id="top10Btn" class="btn">Top 10 (выбрать)</button>
-      </div>
+      <label>Search Country</label>
+      <input id="countrySearch" type="text" placeholder="Korea, United States, JPN…" />
 
-      <div style="margin-top:12px" class="hint">Источник метаданных: OWID/OECD. :contentReference[oaicite:2]{index=2}</div>
-      <div style="margin-top:6px" class="hint">GeoJSON: datasets/geo-countries. :contentReference[oaicite:3]{index=3}</div>
+      <div class="row" style="margin-top:8px">
+        <button id="resetBtn" class="btn">Reset</button>
+        <button id="top10Btn" class="btn">Top 10</button>
+      </div>
     </aside>
 
-    <!-- Основной панель: карта + таблица -->
+    <!-- Main Panel -->
     <main class="panel">
-      <div style="display:grid; grid-template-columns:1fr 420px; gap:12px;">
-        <div>
-          <h3 style="margin:6px 0 8px">Мировая карта — значение по выбранному году</h3>
-          <svg id="map" viewBox="0 0 800 420" preserveAspectRatio="xMidYMid meet"></svg>
-        </div>
+      <h3>World Map — Selected Year</h3>
+      <svg id="map" viewBox="0 0 800 440" preserveAspectRatio="xMidYMid meet"></svg>
 
-        <div>
-          <h3 style="margin:6px 0 8px">Статистика — таблица по году</h3>
-          <div id="tableWrap" style="max-height:320px; overflow:auto; background:transparent; border-radius:6px"></div>
-        </div>
-      </div>
-
-      <details style="margin-top:12px">
-        <summary>Показать сырые строки CSV (выпадающий список)</summary>
-        <div id="rawRows" style="max-height:220px; overflow:auto; margin-top:8px"></div>
-      </details>
+      <h3 style="margin-top:16px">Country Table</h3>
+      <div id="tableWrap" style="max-height:300px; overflow:auto"></div>
     </main>
   </div>
 
@@ -83,306 +118,113 @@
 
 <script>
 (async function(){
-  const LOCAL_CSV = "foreign-aid-given-net.csv"; // попытка автозагрузки
+  const LOCAL_CSV = "foreign-aid-given-net.csv";
   const GEOJSON_URL = "https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson";
 
   const $ = sel => document.querySelector(sel);
-  const fileInput = $("#fileInput");
-  const reloadBtn = $("#reloadBtn");
-  const yearRange = $("#yearRange");
-  const yearLabel = $("#yearLabel");
-  const tableWrap = $("#tableWrap");
-  const rawRows = $("#rawRows");
-  const mapSvg = d3.select("#map");
-  const tooltip = d3.select("#tooltip");
-  const countrySearch = $("#countrySearch");
-  const resetBtn = $("#resetBtn");
-  const top10Btn = $("#top10Btn");
+  const yearRange = $("#yearRange"), yearLabel=$("#yearLabel");
+  const tableWrap=$("#tableWrap"), tooltip=d3.select("#tooltip");
 
-  let rows = [], columns = [], numericCol = null;
-  let years = [];
-  let geojson = null;
-  let countryLookup = new Map(); // code -> name
-  let dataByYear = new Map(); // year -> Map(code -> value)
-  const fmt = d3.format(",.0f");
-  const fmtShort = d3.format(".3s");
+  let rows=[], columns=[], numericCol=null;
+  let geojson=null, years=[], dataByYear=new Map(), countryLookup=new Map();
 
-  // попытка загрузить CSV по относительному пути; если не получается, ждать загрузки через файл
-  async function tryAutoLoad(){
-    try {
-      const r = await fetch(LOCAL_CSV, {cache:"no-store"});
-      if(!r.ok) throw new Error("HTTP " + r.status);
-      const text = await r.text();
+  // load CSV
+  async function loadCsv(auto=true){
+    try{
+      let text;
+      if(auto){
+        const r=await fetch(LOCAL_CSV,{cache:"no-store"});
+        if(!r.ok) throw new Error("HTTP "+r.status);
+        text=await r.text();
+      }else{
+        const f=$("#fileInput").files[0];
+        text=await f.text();
+      }
       parseCsv(text);
-      console.log("CSV загружен автоматически:", LOCAL_CSV);
-      return true;
-    } catch(err){
-      console.warn("Авто-загрузка CSV не удалась:", err);
-      document.getElementById("loadHint").textContent = "Авто-загрузка не удалась — выберите CSV вручную или запустите локальный сервер.";
-      return false;
+    }catch(err){
+      console.error(err);
+      $("#loadHint").textContent="CSV auto-load failed. Please upload manually.";
     }
   }
 
-  // чтение CSV из File (fallback)
-  fileInput.addEventListener("change", ()=>{
-    const f = fileInput.files?.[0];
-    if(!f) return;
-    const fr = new FileReader();
-    fr.onload = e => parseCsv(e.target.result);
-    fr.readAsText(f);
-  });
-
-  reloadBtn.addEventListener("click", ()=> location.reload());
-
-  // парсим CSV (и строим индексированные структуры)
   function parseCsv(text){
-    rows = d3.csvParse(text);
-    columns = rows.columns;
-    // находим последний числовой столбец (как в вашем коде)
-    numericCol = columns.filter(c => !["Entity","Code","Year"].includes(c)).at(-1);
-    // нормализуем строки
+    rows=d3.csvParse(text);
+    columns=rows.columns;
+    numericCol=columns.filter(c=>!["Entity","Code","Year"].includes(c)).at(-1);
+    rows.forEach(r=>{ r.Year=+r.Year; r.Value=+(r[numericCol]||NaN); });
+    years=Array.from(new Set(rows.map(r=>r.Year))).sort((a,b)=>a-b);
+    dataByYear=new Map();
     rows.forEach(r=>{
-      r.Year = +r.Year;
-      r.Value = +(r[numericCol] || NaN);
+      if(!dataByYear.has(r.Year)) dataByYear.set(r.Year,new Map());
+      dataByYear.get(r.Year).set(r.Code.toUpperCase(),r.Value);
+      countryLookup.set(r.Code.toUpperCase(),r.Entity);
     });
-    // подготовим мета: список годов, map по годам
-    const yearSet = new Set(rows.map(r=>r.Year));
-    years = Array.from(yearSet).sort((a,b)=>a-b);
-    // группируем по год/код
-    dataByYear = new Map();
-    rows.forEach(r=>{
-      if(!dataByYear.has(r.Year)) dataByYear.set(r.Year, new Map());
-      const code = (r.Code || "").toUpperCase();
-      dataByYear.get(r.Year).set(code, r.Value);
-      countryLookup.set(code, r.Entity);
-    });
-
-    // обновляем ползунок годов
-    yearRange.min = years[0];
-    yearRange.max = years.at(-1);
-    yearRange.value = years.at(-1);
-    yearLabel.textContent = yearRange.value;
-
-    // отобразим сырые первые строки
-    renderRawRows();
-
-    // загрузим геоjson (если ещё не загружен)
-    if(!geojson) loadGeoJson();
+    yearRange.min=years[0]; yearRange.max=years.at(-1); yearRange.value=years.at(-1);
+    yearLabel.textContent=yearRange.value;
+    if(!geojson) loadGeo();
     else updateAll();
   }
 
-  // показать первые N сырых строк
-  function renderRawRows(){
-    rawRows.innerHTML = "";
-    const table = document.createElement("table");
-    table.innerHTML = "<thead><tr>" + columns.map(c=>`<th>${c}</th>`).join("") + "</tr></thead>";
-    const tb = document.createElement("tbody");
-    rows.slice(0,200).forEach(r=>{
-      const tr = document.createElement("tr");
-      columns.forEach(c=>{
-        const td = document.createElement("td");
-        td.textContent = r[c] ?? "";
-        tr.appendChild(td);
-      });
-      tb.appendChild(tr);
-    });
-    table.appendChild(tb);
-    rawRows.appendChild(table);
+  async function loadGeo(){
+    const r=await fetch(GEOJSON_URL); geojson=await r.json();
+    updateAll();
   }
 
-  // загрузка GeoJSON (countries with ISO_A3 properties)
-  async function loadGeoJson(){
-    try{
-      const r = await fetch(GEOJSON_URL);
-      if(!r.ok) throw new Error("HTTP " + r.status);
-      geojson = await r.json();
-      console.log("GeoJSON загружен");
-      // сразу строим карту
-      buildMap();
-      updateAll();
-    }catch(err){
-      console.error("Не удалось загрузить GeoJSON:", err);
-      document.getElementById("loadHint").textContent = "Не удалось загрузить GeoJSON для карты. Вы можете загрузить CSV и использовать только таблицу.";
-    }
-  }
-
-  // обновить всё при смене года / фильтра
   function updateAll(){
-    const year = +yearRange.value;
-    yearLabel.textContent = year;
-    renderTable(year);
-    renderMap(year);
+    const year=+yearRange.value; yearLabel.textContent=year;
+    renderMap(year); renderTable(year);
   }
 
-  // рендер таблицы — сводка по выбранному году
   function renderTable(year){
-    tableWrap.innerHTML = "";
-    const mapY = dataByYear.get(year) || new Map();
-    // сформируем массив стран c value
-    const arr = [];
-    for(const [code,name] of countryLookup.entries()){
-      const value = mapY.get(code) ?? NaN;
-      arr.push({code, name, value: Number.isFinite(value) ? value : NaN});
-    }
-    // сортировка: по убыванию значения (NaN в конце)
-    arr.sort((a,b)=> (Number.isFinite(b.value)?b.value: -Infinity) - (Number.isFinite(a.value)?a.value:-Infinity) );
-
-    // создаём таблицу
-    const table = document.createElement("table");
-    table.innerHTML = `<thead><tr><th>#</th><th>Страна</th><th>Код</th><th style="text-align:right">Значение (${numericCol})</th></tr></thead>`;
-    const tb = document.createElement("tbody");
+    const mapY=dataByYear.get(year)||new Map();
+    const arr=Array.from(countryLookup.entries()).map(([c,n])=>({code:c,name:n,value:mapY.get(c)}));
+    arr.sort((a,b)=>(b.value||0)-(a.value||0));
+    tableWrap.innerHTML="";
+    const table=document.createElement("table");
+    table.innerHTML=`<thead><tr><th>#</th><th>Country</th><th>Code</th><th style="text-align:right">Value</th></tr></thead>`;
+    const tb=document.createElement("tbody");
     arr.forEach((d,i)=>{
-      const tr = document.createElement("tr");
-      tr.innerHTML = `<td style="width:36px">${i+1}</td>
-                      <td>${d.name||""}</td>
-                      <td>${d.code||""}</td>
-                      <td style="text-align:right">${Number.isFinite(d.value)? fmt(d.value) : "-"}</td>`;
-      tr.addEventListener("click", ()=> onCountryClick(d.code));
+      const tr=document.createElement("tr");
+      tr.innerHTML=`<td>${i+1}</td><td>${d.name}</td><td>${d.code}</td><td style="text-align:right">${isFinite(d.value)?d3.format(",")(d.value):"-"}</td>`;
       tb.appendChild(tr);
     });
-    table.appendChild(tb);
-    tableWrap.appendChild(table);
+    table.appendChild(tb); tableWrap.appendChild(table);
   }
 
-  // клик по стране — показать подсказку и выделить
-  function onCountryClick(code){
-    const name = countryLookup.get(code) || code;
-    // покажем простую линейную мини-диаграмму в alert (можно улучшить)
-    const series = rows.filter(r=> (r.Code||"").toUpperCase() === code ).sort((a,b)=>a.Year-b.Year);
-    if(series.length===0){ alert(name + " — данных нет."); return; }
-    // подготовим строку с годами/значениями (несколько)
-    const lines = series.slice(-10).map(s=>`${s.Year}: ${Number.isFinite(s.Value)?fmt(s.Value):"-"}`).join("\n");
-    alert(name + "\n\nПоследние записи (макс 10):\n" + lines);
-  }
-
-  // рендер карты — choropleth
   function renderMap(year){
     if(!geojson) return;
-    const mapY = dataByYear.get(year) || new Map();
-
-    // для домена цветовой шкалы берём положительные значения (min>0)
-    const values = [];
-    for(const v of mapY.values()) if(Number.isFinite(v) && v>0) values.push(v);
-    const minVal = d3.min(values) || 0;
-    const maxVal = d3.max(values) || 1;
-    const color = d3.scaleSequential(t => d3.interpolateBlues(t)).domain([Math.log(minVal+1), Math.log(maxVal+1)]);
-
-    // подготовка размеров
-    const bbox = {width:800, height:420};
-    const projection = d3.geoNaturalEarth1().fitSize([bbox.width, bbox.height], geojson);
-    const path = d3.geoPath(projection);
-
-    mapSvg.selectAll("*").remove();
-    // defs gradient legend
-    const defs = mapSvg.append("defs");
-    // draw countries
-    mapSvg.append("g")
-      .selectAll("path")
-      .data(geojson.features)
-      .join("path")
-      .attr("d", path)
-      .attr("stroke", "rgba(0,0,0,0.25)")
-      .attr("stroke-width", 0.3)
-      .attr("fill", f=>{
-        // ищем ISO3 код в разных местах
-        const props = f.properties || {};
-        const isoCandidates = [props.ISO_A3, props.iso_a3, props.iso3, props.ISO3, props.id, props.ADM0_A3, props.iso3_a2].filter(Boolean);
-        const iso = (isoCandidates[0] || "").toString().toUpperCase();
-        const val = mapY.get(iso);
-        if(Number.isFinite(val) && val>0) return color(Math.log(val+1));
-        return "#0f1720"; // фон для отсутствующих
+    const mapY=dataByYear.get(year)||new Map();
+    const values=Array.from(mapY.values()).filter(v=>isFinite(v)&&v>0);
+    const color=d3.scaleSequential(d3.interpolateBlues).domain([Math.log1p(d3.min(values)||1),Math.log1p(d3.max(values)||10)]);
+    const projection=d3.geoNaturalEarth1().fitSize([800,440],geojson);
+    const path=d3.geoPath(projection);
+    const svg=d3.select("#map"); svg.selectAll("*").remove();
+    svg.append("g").selectAll("path").data(geojson.features).join("path")
+      .attr("d",path)
+      .attr("fill",f=>{
+        const iso=(f.properties.ISO_A3||"").toUpperCase();
+        const val=mapY.get(iso);
+        return isFinite(val)&&val>0?color(Math.log1p(val)):"#e5e7eb";
       })
-      .on("mousemove", (event, f)=>{
-        const props = f.properties || {};
-        const iso = (props.ISO_A3 || props.iso_a3 || props.iso3 || props.ADM0_A3 || props.id || "").toString().toUpperCase();
-        const name = props.ADMIN || props.NAME || props.name || countryLookup.get(iso) || "—";
-        const val = dataByYear.get(year)?.get(iso);
-        tooltip.style("display","block")
-          .style("left", (event.pageX + 12) + "px")
-          .style("top", (event.pageY + 12) + "px")
-          .html(`<strong>${name}</strong><div style="margin-top:4px">${iso} — ${Number.isFinite(val)?fmt(val):"нет данных"}</div>`);
+      .attr("stroke","#555").attr("stroke-width",0.4)
+      .on("mousemove",(ev,f)=>{
+        const iso=(f.properties.ISO_A3||"").toUpperCase();
+        const name=f.properties.ADMIN||countryLookup.get(iso)||iso;
+        const val=mapY.get(iso);
+        tooltip.style("display","block").style("left",(ev.pageX+12)+"px").style("top",(ev.pageY+12)+"px")
+          .html(`<strong>${name}</strong><br/>${iso}: ${isFinite(val)?d3.format(",")(val):"no data"}`);
       })
-      .on("mouseout", ()=> tooltip.style("display","none"))
-      .on("click", (event,f)=>{
-        const props = f.properties || {};
-        const iso = (props.ISO_A3 || props.iso_a3 || props.iso3 || props.ADM0_A3 || props.id || "").toString().toUpperCase();
-        onCountryClick(iso);
-      });
-
-    // легенда: простая полоска
-    const legendW = 240, legendH = 12;
-    const legendX = 12, legendY = bbox.height - 20;
-    const legend = mapSvg.append("g").attr("transform", `translate(${legendX}, ${legendY})`);
-    const gradientId = "grad1";
-    defs.append("linearGradient").attr("id", gradientId).attr("x1","0%").attr("x2","100%")
-      .selectAll("stop")
-      .data(d3.range(0,1.001,0.05))
-      .join("stop")
-      .attr("offset", d=> (d*100)+"%")
-      .attr("stop-color", d=> d3.interpolateBlues(d));
-
-    legend.append("rect").attr("width", legendW).attr("height", legendH).attr("fill", `url(#${gradientId})`).attr("stroke","rgba(255,255,255,0.03)");
-    // legend ticks
-    const ticks = [minVal, Math.round((minVal+maxVal)/2), maxVal].map(v => Math.round(v));
-    legend.append("g").attr("transform", `translate(0, ${legendH+4})`)
-      .selectAll("text").data(ticks).join("text")
-      .attr("x", (d,i)=> i===0?0 : i===1?legendW/2:legendW)
-      .attr("text-anchor", (d,i)=> i===0?"start":i===2?"end":"middle")
-      .attr("fill","var(--muted)")
-      .text(d=>fmt(d));
+      .on("mouseout",()=>tooltip.style("display","none"));
   }
 
-  // обработчики UI
-  yearRange.addEventListener("input", ()=> updateAll());
-  countrySearch.addEventListener("input", ()=>{
-    const q = countrySearch.value.trim().toLowerCase();
-    if(!q){ renderTable(+yearRange.value); return; }
-    // фильтр таблицы по подстроке в имени или коде
-    const mapY = dataByYear.get(+yearRange.value) || new Map();
-    const matched = [];
-    for(const [code,name] of countryLookup.entries()){
-      if((name||"").toLowerCase().includes(q) || (code||"").toLowerCase().includes(q)){
-        matched.push({code, name, value: mapY.get(code)});
-      }
-    }
-    matched.sort((a,b)=> (Number.isFinite(b.value)?b.value: -Infinity) - (Number.isFinite(a.value)?a.value:-Infinity) );
-    tableWrap.innerHTML = "";
-    const table = document.createElement("table");
-    table.innerHTML = `<thead><tr><th>#</th><th>Страна</th><th>Код</th><th style="text-align:right">Значение</th></tr></thead>`;
-    const tb = document.createElement("tbody");
-    matched.forEach((d,i)=>{
-      const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${i+1}</td><td>${d.name}</td><td>${d.code}</td><td style="text-align:right">${Number.isFinite(d.value)?fmt(d.value):"-"}</td>`;
-      tb.appendChild(tr);
-    });
-    table.appendChild(tb);
-    tableWrap.appendChild(table);
-  });
+  // UI events
+  yearRange.addEventListener("input",updateAll);
+  $("#reloadBtn").addEventListener("click",()=>location.reload());
+  $("#fileInput").addEventListener("change",()=>loadCsv(false));
 
-  resetBtn.addEventListener("click", ()=>{
-    countrySearch.value = "";
-    yearRange.value = yearRange.max;
-    updateAll();
-  });
-
-  top10Btn.addEventListener("click", ()=>{
-    const year = +yearRange.value;
-    const mapY = dataByYear.get(year) || new Map();
-    const arr = Array.from(mapY.entries()).map(([code,val])=>({code, val: Number.isFinite(val)?val:0}));
-    arr.sort((a,b)=>b.val-a.val);
-    const top = arr.slice(0,10).map(d=>d.code).join(", ");
-    alert("Top 10 (codes):\n" + top);
-  });
-
-  // сначала попробуем автозагрузку CSV; если не получилось — ждём ручную загрузку.
-  const ok = await tryAutoLoad();
-  if(!ok){
-    // ничего не делаем — ждём, пока пользователь загрузит CSV через input
-  } else {
-    // если автоуспел, то кнопка reload перезагрузит страницу
-  }
-
+  loadCsv(true);
 })();
 </script>
 </body>
 </html>
+
