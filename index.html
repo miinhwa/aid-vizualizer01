@@ -1,313 +1,388 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ru">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Foreign aid given — 년도별 나라별 선형 차트</title>
-<meta name="description" content="OWID/OECD 외교 원조(ODA, net disbursements) — 나라별 연도 추이. 라인 위에 마우스를 올리면 해당 나라 이름을 크게 표시합니다.">
+<title>Foreign aid — таблица и мировая карта</title>
 <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
-<script src="https://cdn.jsdelivr.net/npm/d3-dsv@3"></script>
 <style>
-  :root{
-    --bg:#0b0c0f; --panel:#12141a; --text:#e5e7eb; --muted:#9ca3af; --border:#222531; --accent:#60a5fa;
-  }
+  :root{--bg:#0b0c0f; --panel:#12141a; --text:#e5e7eb; --muted:#9ca3af; --border:#222531; --accent:#60a5fa;}
   body{margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;}
-  header{padding:16px 20px; border-bottom:1px solid var(--border); display:flex; gap:12px; align-items:center; flex-wrap:wrap}
-  header h1{margin:0; font-size:18px}
-  .muted{color:var(--muted)}
-  .shell{display:grid; grid-template-columns:320px 1fr; gap:16px; padding:16px}
-  @media (max-width:900px){ .shell{grid-template-columns:1fr} }
-  .panel{background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px}
+  .wrap{display:grid; grid-template-columns:360px 1fr; gap:14px; padding:16px;}
+  @media(max-width:900px){ .wrap{grid-template-columns:1fr} }
+  .panel{background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:12px;}
+  h1{margin:6px 0 10px; font-size:18px}
   label{font-weight:600; display:block; margin:8px 0 6px}
-  input[type="text"], button, .chip, select{
-    border:1px solid var(--border); background:#0000; color:var(--text); border-radius:10px; padding:9px 12px;
-  }
-  input[type="text"]{width:100%;}
+  input[type="file"]{color:var(--muted)}
   .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
-  .chips{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px}
-  .chip{font-size:12px; cursor:pointer}
-  .chip.active{background:var(--accent); color:#001018; border-color:transparent}
-  .btn{cursor:pointer}
+  .btn{padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:transparent; color:var(--text); cursor:pointer}
   .btn.primary{background:var(--accent); color:#001018; border-color:transparent}
-  .hint{font-size:12px; color:var(--muted)}
-  .chart-wrap{position:relative; min-height:360px}
-  svg{width:100%; height:560px; display:block}
-  .legend{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px}
-  .legend .item{display:flex; align-items:center; gap:6px; padding:4px 8px; border:1px solid var(--border); border-radius:999px; font-size:12px}
-  .sw{width:12px; height:12px; border-radius:2px}
-  .error{padding:10px 12px; border:1px solid #ef4444; color:#fecaca; background:#450a0a; border-radius:8px; margin-top:10px}
-  a{color:var(--accent); text-decoration:none}
-  a:hover{text-decoration:underline}
+  #map, #chartSvg{width:100%; height:420px; display:block; background:transparent}
+  table{width:100%; border-collapse:collapse; margin-top:8px; font-size:13px}
+  th,td{padding:6px 8px; border-bottom:1px solid rgba(255,255,255,0.03)}
+  th{position:sticky; top:0; background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0))}
+  .hint{color:var(--muted); font-size:13px}
+  #tooltip{position:fixed; pointer-events:none; background:#fff; color:#000; padding:6px 8px; border-radius:6px; font-size:13px; display:none; box-shadow:0 6px 18px rgba(0,0,0,0.5)}
 </style>
 </head>
 <body>
-<header>
-  <h1>Foreign aid given — 나라별 연도 추이</h1>
-  <span class="muted">데이터: Our World in Data / OECD (상수 2022 US$)</span>
-</header>
+  <div style="padding:12px 16px; border-bottom:1px solid rgba(255,255,255,0.03)">
+    <h1>Foreign aid given — таблица + мировая карта</h1>
+    <div class="hint">Данные: Our World in Data / OECD (constant 2022 US$). Если CSV не доступен через fetch, используйте кнопку «Загрузить CSV». </div>
+  </div>
 
-<div class="shell">
-  <!-- 컨트롤 패널 -->
-  <aside class="panel">
-    <p class="hint">이건 유네스코…(의 맥락과 유사한) <b>OWID/OECD</b>의 ODA(net) 데이터예요. <br>각 나라의 연도별 선을 그렸고, <b>선에 마우스를 올리면 그 나라 이름을 크게</b> 보여줘요.</p>
+  <div class="wrap">
+    <!-- Панель управления -->
+    <aside class="panel" style="min-height:420px">
+      <label>CSV (авто: <code>foreign-aid-given-net.csv</code>)</label>
+      <div class="row">
+        <input id="fileInput" type="file" accept=".csv" />
+        <button id="reloadBtn" class="btn">Перезагрузить</button>
+      </div>
+      <div id="loadHint" class="hint" style="margin-top:8px">Попробую загрузить <code>foreign-aid-given-net.csv</code> автоматически. Если не получается — выберите файл вручную.</div>
 
-    <label for="search">국가 검색</label>
-    <input id="search" type="text" placeholder="예: Korea, United States, Japan…" autocomplete="off" />
-    <div id="searchResults" class="chips" aria-live="polite"></div>
+      <label style="margin-top:10px">Год</label>
+      <div class="row">
+        <input id="yearRange" type="range" min="1960" max="2025" step="1" value="2023" style="flex:1" />
+        <div id="yearLabel" style="width:68px; text-align:center">—</div>
+      </div>
 
-    <label>선택된 국가: <span id="countSel">0</span></label>
-    <div id="selectedChips" class="chips"></div>
+      <label style="margin-top:8px">Поиск страны</label>
+      <input id="countrySearch" type="text" placeholder="Например: Korea, United States, JPN…" style="width:100%; padding:8px; border-radius:8px; border:1px solid var(--border); background:transparent; color:var(--text)"/>
+      <div style="margin-top:8px" class="row">
+        <button id="resetBtn" class="btn">Сброс</button>
+        <button id="top10Btn" class="btn">Top 10 (выбрать)</button>
+      </div>
 
-    <div class="row" style="margin-top:8px">
-      <button class="btn" id="clear">초기화</button>
-      <button class="btn" id="top10">최신 기준 Top 10 추정</button>
-    </div>
+      <div style="margin-top:12px" class="hint">Источник метаданных: OWID/OECD. :contentReference[oaicite:2]{index=2}</div>
+      <div style="margin-top:6px" class="hint">GeoJSON: datasets/geo-countries. :contentReference[oaicite:3]{index=3}</div>
+    </aside>
 
-    <label style="margin-top:10px">빠른 프리셋</label>
-    <div id="presets" class="chips">
-      <span class="chip" data-k="G7">G7</span>
-      <span class="chip" data-k="Nordic">Nordic</span>
-      <span class="chip" data-k="NEA">N.East Asia</span>
-      <span class="chip" data-k="EU">EU(일부)</span>
-    </div>
+    <!-- Основной панель: карта + таблица -->
+    <main class="panel">
+      <div style="display:grid; grid-template-columns:1fr 420px; gap:12px;">
+        <div>
+          <h3 style="margin:6px 0 8px">Мировая карта — значение по выбранному году</h3>
+          <svg id="map" viewBox="0 0 800 420" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
 
-    <label style="margin-top:10px">연도 범위</label>
-    <div class="row">
-      <span class="hint" id="y0lbl">—</span>
-      <input id="y0" type="range" min="1960" max="2025" step="1" value="1990" />
-      <input id="y1" type="range" min="1960" max="2025" step="1" value="2025" />
-      <span class="hint" id="y1lbl">—</span>
-    </div>
+        <div>
+          <h3 style="margin:6px 0 8px">Статистика — таблица по году</h3>
+          <div id="tableWrap" style="max-height:320px; overflow:auto; background:transparent; border-radius:6px"></div>
+        </div>
+      </div>
 
-    <div class="row" style="margin-top:8px">
-      <button class="btn primary" id="apply">적용</button>
-      <button class="btn" id="share">링크 복사</button>
-    </div>
+      <details style="margin-top:12px">
+        <summary>Показать сырые строки CSV (выпадающий список)</summary>
+        <div id="rawRows" style="max-height:220px; overflow:auto; margin-top:8px"></div>
+      </details>
+    </main>
+  </div>
 
-    <div id="errorBox" class="error" style="display:none"></div>
-  </aside>
-
-> miinhwa:
-<!-- 차트 -->
-  <main class="panel">
-    <h2 style="margin-top:0">라인 차트 (단위: 2022년 기준 미화)</h2>
-    <div class="chart-wrap">
-      <svg id="chart" role="img" aria-label="국가별 외교 원조 라인 차트">
-        <!-- 내부 그룹은 스크립트에서 생성 -->
-      </svg>
-      <!-- 마우스 따라다니는 큰 라벨 -->
-      <div id="hoverLabel" style="
-        position:absolute; left:0; top:0; transform: translate(-50%, -120%);
-        pointer-events:none; font-weight:800; font-size:26px; letter-spacing:0.2px;
-        color:rgba(255,255,255,0.96); text-shadow:0 2px 14px rgba(0,0,0,0.55);
-        display:none; white-space:nowrap;"></div>
-    </div>
-
-    <div id="legend" class="legend"></div>
-  </main>
-</div>
+  <div id="tooltip"></div>
 
 <script>
 (async function(){
-  // ===== 설정 =====
-  // 1) 온라인 CSV(항상 최신) — GitHub Pages에서 바로 작동
-  const ONLINE_CSV = "https://ourworldindata.org/grapher/foreign-aid-given-net.csv";
-  // 2) 로컬 CSV로 쓰고 싶으면, data/foreign-aid-given-net.csv 로 복사 후 아래 줄 주석 해제:
-  // const ONLINE_CSV = "data/foreign-aid-given-net.csv";
+  const LOCAL_CSV = "foreign-aid-given-net.csv"; // попытка автозагрузки
+  const GEOJSON_URL = "https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson";
 
-  const $ = (s, r=document)=>r.querySelector(s);
-  const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
-  const fmtSI = d3.format(".2s");
-  const fmtInt = d3.format(",.0f");
-  const debounce = (fn, ms=120)=>{ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; };
+  const $ = sel => document.querySelector(sel);
+  const fileInput = $("#fileInput");
+  const reloadBtn = $("#reloadBtn");
+  const yearRange = $("#yearRange");
+  const yearLabel = $("#yearLabel");
+  const tableWrap = $("#tableWrap");
+  const rawRows = $("#rawRows");
+  const mapSvg = d3.select("#map");
+  const tooltip = d3.select("#tooltip");
+  const countrySearch = $("#countrySearch");
+  const resetBtn = $("#resetBtn");
+  const top10Btn = $("#top10Btn");
 
-  const state = {
-    series:new Map(), names:new Map(), codes:[],
-    selected:new Set(),
-    yearMin:1990, yearMax:2025, yearsAll:[1960,2025]
-  };
+  let rows = [], columns = [], numericCol = null;
+  let years = [];
+  let geojson = null;
+  let countryLookup = new Map(); // code -> name
+  let dataByYear = new Map(); // year -> Map(code -> value)
+  const fmt = d3.format(",.0f");
+  const fmtShort = d3.format(".3s");
 
-  const PRESETS = {
-    G7: ["USA","GBR","FRA","DEU","ITA","CAN","JPN"],
-    Nordic: ["SWE","NOR","DNK","FIN","ISL"].filter(Boolean),
-    NEA: ["KOR","JPN","CHN","TWN","HKG","SGP"],
-    EU: ["DEU","FRA","ITA","ESP","NLD","SWE","DNK"]
-  };
-
-  // ====== 데이터 로드 ======
-  let rows;
-  try{
-    const text = await fetch(ONLINE_CSV, {cache:"no-store"}).then(r=>{
+  // попытка загрузить CSV по относительному пути; если не получается, ждать загрузки через файл
+  async function tryAutoLoad(){
+    try {
+      const r = await fetch(LOCAL_CSV, {cache:"no-store"});
       if(!r.ok) throw new Error("HTTP " + r.status);
-      return r.text();
-    });
-    rows = d3.csvParse(text);
-  }catch(err){
-    const eb = $("#errorBox");
-    eb.style.display="";
-    eb.innerHTML = "데이터를 불러오지 못했습니다: " + err.message +
-      "<br>로컬 파일(file://)로 여셨다면 브라우저 보안 정책으로 차단됩니다. GitHub Pages에 업로드하거나 간단한 로컬 서버로 열어주세요.";
-    console.error(err);
-    return;
-  }
-
-  const numericCol = rows.columns.filter(c=>!["Entity","Code","Year"].includes(c)).at(-1);
-  const series = new Map(), names = new Map(), codes = new Set();
-  let minYear=Infinity, maxYear=-Infinity;
-  rows.forEach(r=>{
-    const name=r.Entity, code=r.Code, year=+r.Year;
-    const value = r[numericCol] ? +r[numericCol] : NaN;
-    if(!code⠞⠞⠺⠟⠞⠟⠞⠺⠟!Number.isFinite(year)) return;
-    names.set(code, name); codes.add(code);
-    minYear = Math.min(minYear, year); maxYear = Math.max(maxYear, year);
-    if(!series.has(code)) series.set(code, []);
-    if(Number.isFinite(value)) series.get(code).push({year,value});
-  });
-  for(const [code, arr] of series){ arr.sort((a,b)=>a.year-b.year); arr.name = names.get(code); }
-
-  Object.assign(state, {
-    series, names, codes:[...codes],
-    yearsAll:[minYear, maxYear],
-    yearMin: Math.max(minYear, 1990),
-    yearMax: maxYear
-  });
-
-  // ====== 컨트롤 바인딩 ======
-  const search = $("#search"), searchResults=$("#searchResults");
-  const selectedChips=$("#selectedChips"), countSel=$("#countSel");
-  const y0=$("#y0"), y1=$("#y1"), y0lbl=$("#y0lbl"), y1lbl=$("#y1lbl");
-
-  y0.min=minYear; y0.max=maxYear; y1.min=minYear; y1.max=maxYear;
-  y0.value=state.yearMin; y1.value=state.yearMax;
-  y0lbl.textContent=state.yearMin; y1lbl.textContent=state.yearMax;
-
-  search.addEventListener("input", debounce(()=>{
-    const q=search.value.trim().toLowerCase();
-    searchResults.innerHTML="";
-    if(!q) return;
-    state.codes
-      .map(code=>({code, name:state.names.get(code)}))
-      .filter(d=>d.name.toLowerCase().includes(q) || d.code.toLowerCase().includes(q))
-      .slice(0,20)
-      .forEach(d=>{
-        const el=document.createElement("span");
-        el.className="chip";
-        el.textContent=`${d.name} (${d.code})`;
-        el.onclick=()=>{ state.selected.add(d.code); search.value=""; renderAll(); };
-        searchResults.appendChild(el);
-      });
-  },150));
-
-  $("#clear").
-
-> miinhwa:
-onclick=()=>{ state.selected.clear(); renderAll(); };
-  $("#top10").onclick=()=>{
-    const last = state.yearMax;
-    const top = [...state.series].map(([code,arr])=>{
-      const ex = arr.find(d=>d.year===last)⠺⠵⠺⠺⠟⠵⠺⠵⠟⠞⠺⠵⠺⠺{value:0};
-      return {code, value: ex.value||0};
-    }).sort((a,b)=>b.value-a.value).slice(0,10);
-    state.selected = new Set(top.map(d=>d.code));
-    renderAll();
-  };
-  $("#presets").addEventListener("click",(e)=>{
-    const chip=e.target.closest(".chip"); if(!chip) return;
-    (PRESETS[chip.dataset.k]||[]).forEach(c=>state.selected.add(c));
-    renderAll();
-  });
-
-  y0.addEventListener("input", ()=>{
-    let v=+y0.value; if(v>+y1.value) v=+y1.value;
-    state.yearMin=v; y0lbl.textContent=v; renderChart(); renderLegend();
-  });
-  y1.addEventListener("input", ()=>{
-    let v=+y1.value; if(v<+y0.value) v=+y0.value;
-    state.yearMax=v; y1lbl.textContent=v; renderChart(); renderLegend();
-  });
-
-  $("#apply").onclick=()=>renderAll();
-  $("#share").onclick=()=>{
-    const p=new URLSearchParams();
-    if(state.selected.size) p.set("countries",[...state.selected].join(","));
-    p.set("start",state.yearMin); p.set("end",state.yearMax);
-    const url=location.origin+location.pathname+"?"+p.toString();
-    navigator.clipboard?.writeText(url);
-    alert("링크가 복사되었습니다:\n\n"+url);
-  };
-
-  // ====== 차트 셋업 ======
-  const svg = d3.select("#chart");
-  const gRoot = svg.append("g");
-  const gGrid = gRoot.append("g");
-  const gLines = gRoot.append("g");
-  const gAxes = gRoot.append("g");
-  const margin = {top:24, right:24, bottom:38, left:70};
-  const color = d3.scaleOrdinal(d3.schemeTableau10);
-  const hoverLabel = $("#hoverLabel");
-
-  function size(){
-    const node = svg.node();
-    const width = node.clientWidth || 900;
-    const height = node.clientHeight || 560;
-    return {width, height, iw: width - margin.left - margin.right, ih: height - margin.top - margin.bottom};
-  }
-
-  function selectedSeries(){
-    return [...state.selected].map(code=>{
-      const vals = (state.series.get(code)||[]).filter(d=>d.year>=state.yearMin && d.year<=state.yearMax);
-      return {code, name:state.names.get(code), values:vals};
-    }).filter(s=>s.values.length>1);
-  }
-
-  function renderLegend(){
-    const legend=$("#legend"); legend.innerHTML="";
-    selectedSeries().forEach(s=>{
-      const el=document.createElement("div");
-      el.className="item";
-      el.innerHTML=`<span class="sw" style="background:${color(s.code)}"></span> ${s.name}`;
-      el.onclick=()=>{ state.selected.delete(s.code); renderAll(); };
-      legend.appendChild(el);
-    });
-  }
-
-  function renderChart(){
-    const {width,height,iw,ih} = size();
-    svg.attr("viewBox",`0 0 ${width} ${height}`);
-    gRoot.attr("transform",`translate(${margin.left},${margin.top})`);
-    gGrid.selectAll("*").remove();
-    gAxes.selectAll("*").remove();
-    gLines.selectAll("*").remove();
-
-    const data = selectedSeries();
-    // 만약 아무 것도 선택 안했으면 — 흐린 전체 라인(성능 주의) 대신 기본 셋 (KOR/USA/JPN/DEU/FRA/GBR)
-    if(data.length===0){
-      ["KOR","USA","JPN","DEU","FRA","GBR"].forEach(c=>state.selected.add(c));
-      return renderChart();
+      const text = await r.text();
+      parseCsv(text);
+      console.log("CSV загружен автоматически:", LOCAL_CSV);
+      return true;
+    } catch(err){
+      console.warn("Авто-загрузка CSV не удалась:", err);
+      document.getElementById("loadHint").textContent = "Авто-загрузка не удалась — выберите CSV вручную или запустите локальный сервер.";
+      return false;
     }
+  }
 
-    const x = d3.scaleLinear().domain([state.yearMin, state.yearMax]).range([0, iw]);
-    let yMax = 0;
-    data.forEach(s=>s.values.forEach(d=>{ if(Number.isFinite(d.value)) yMax=Math.max(yMax,d.value); }));
-    if(yMax<=0) yMax=1;
-    const y = d3.scaleLinear().domain([0, yMax]).nice().range([ih,0]);
+  // чтение CSV из File (fallback)
+  fileInput.addEventListener("change", ()=>{
+    const f = fileInput.files?.[0];
+    if(!f) return;
+    const fr = new FileReader();
+    fr.onload = e => parseCsv(e.target.result);
+    fr.readAsText(f);
+  });
 
-    // grid
-    gGrid.append("g").attr("stroke","currentColor").attr("opacity",0.1)
-      .selectAll("line").data(y.ticks(6)).join("line")
-      .attr("x1",0).attr("x2",iw).attr("y1",d=>y(d)).attr("y2",d=>y(d));
+  reloadBtn.addEventListener("click", ()=> location.reload());
 
-    // axes
-    gAxes.append("g").attr("transform",`translate(0,${ih})`).call(d3.axisBottom(x).ticks(Math.min(12, state.yearMax-state.yearMin)));
-    gAxes.append("g").call(d3.axisLeft(y).ticks(6,"~s"));
+  // парсим CSV (и строим индексированные структуры)
+  function parseCsv(text){
+    rows = d3.csvParse(text);
+    columns = rows.columns;
+    // находим последний числовой столбец (как в вашем коде)
+    numericCol = columns.filter(c => !["Entity","Code","Year"].includes(c)).at(-1);
+    // нормализуем строки
+    rows.forEach(r=>{
+      r.Year = +r.Year;
+      r.Value = +(r[numericCol] || NaN);
+    });
+    // подготовим мета: список годов, map по годам
+    const yearSet = new Set(rows.map(r=>r.Year));
+    years = Array.from(yearSet).sort((a,b)=>a-b);
+    // группируем по год/код
+    dataByYear = new Map();
+    rows.forEach(r=>{
+      if(!dataByYear.has(r.Year)) dataByYear.set(r.Year, new Map());
+      const code = (r.Code || "").toUpperCase();
+      dataByYear.get(r.Year).set(code, r.Value);
+      countryLookup.set(code, r.Entity);
+    });
 
-    // line generator
-    const line = d3.line()
-      .defined(d=>Number.isFinite(d.value))
-      .x(d=>x(d.year))
-      .y(d=>y(d.value));
+    // обновляем ползунок годов
+    yearRange.min = years[0];
+    yearRange.max = years.at(-1);
+    yearRange.value = years.at(-1);
+    yearLabel.textContent = yearRange.value;
 
-    // 각 국가 라인 (호버 이벤트 포함)
-    const lineGroups = gLines.selectAll("g.line")
-      .
+    // отобразим сырые первые строки
+    renderRawRows();
 
+    // загрузим геоjson (если ещё не загружен)
+    if(!geojson) loadGeoJson();
+    else updateAll();
+  }
+
+  // показать первые N сырых строк
+  function renderRawRows(){
+    rawRows.innerHTML = "";
+    const table = document.createElement("table");
+    table.innerHTML = "<thead><tr>" + columns.map(c=>`<th>${c}</th>`).join("") + "</tr></thead>";
+    const tb = document.createElement("tbody");
+    rows.slice(0,200).forEach(r=>{
+      const tr = document.createElement("tr");
+      columns.forEach(c=>{
+        const td = document.createElement("td");
+        td.textContent = r[c] ?? "";
+        tr.appendChild(td);
+      });
+      tb.appendChild(tr);
+    });
+    table.appendChild(tb);
+    rawRows.appendChild(table);
+  }
+
+  // загрузка GeoJSON (countries with ISO_A3 properties)
+  async function loadGeoJson(){
+    try{
+      const r = await fetch(GEOJSON_URL);
+      if(!r.ok) throw new Error("HTTP " + r.status);
+      geojson = await r.json();
+      console.log("GeoJSON загружен");
+      // сразу строим карту
+      buildMap();
+      updateAll();
+    }catch(err){
+      console.error("Не удалось загрузить GeoJSON:", err);
+      document.getElementById("loadHint").textContent = "Не удалось загрузить GeoJSON для карты. Вы можете загрузить CSV и использовать только таблицу.";
+    }
+  }
+
+  // обновить всё при смене года / фильтра
+  function updateAll(){
+    const year = +yearRange.value;
+    yearLabel.textContent = year;
+    renderTable(year);
+    renderMap(year);
+  }
+
+  // рендер таблицы — сводка по выбранному году
+  function renderTable(year){
+    tableWrap.innerHTML = "";
+    const mapY = dataByYear.get(year) || new Map();
+    // сформируем массив стран c value
+    const arr = [];
+    for(const [code,name] of countryLookup.entries()){
+      const value = mapY.get(code) ?? NaN;
+      arr.push({code, name, value: Number.isFinite(value) ? value : NaN});
+    }
+    // сортировка: по убыванию значения (NaN в конце)
+    arr.sort((a,b)=> (Number.isFinite(b.value)?b.value: -Infinity) - (Number.isFinite(a.value)?a.value:-Infinity) );
+
+    // создаём таблицу
+    const table = document.createElement("table");
+    table.innerHTML = `<thead><tr><th>#</th><th>Страна</th><th>Код</th><th style="text-align:right">Значение (${numericCol})</th></tr></thead>`;
+    const tb = document.createElement("tbody");
+    arr.forEach((d,i)=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td style="width:36px">${i+1}</td>
+                      <td>${d.name||""}</td>
+                      <td>${d.code||""}</td>
+                      <td style="text-align:right">${Number.isFinite(d.value)? fmt(d.value) : "-"}</td>`;
+      tr.addEventListener("click", ()=> onCountryClick(d.code));
+      tb.appendChild(tr);
+    });
+    table.appendChild(tb);
+    tableWrap.appendChild(table);
+  }
+
+  // клик по стране — показать подсказку и выделить
+  function onCountryClick(code){
+    const name = countryLookup.get(code) || code;
+    // покажем простую линейную мини-диаграмму в alert (можно улучшить)
+    const series = rows.filter(r=> (r.Code||"").toUpperCase() === code ).sort((a,b)=>a.Year-b.Year);
+    if(series.length===0){ alert(name + " — данных нет."); return; }
+    // подготовим строку с годами/значениями (несколько)
+    const lines = series.slice(-10).map(s=>`${s.Year}: ${Number.isFinite(s.Value)?fmt(s.Value):"-"}`).join("\n");
+    alert(name + "\n\nПоследние записи (макс 10):\n" + lines);
+  }
+
+  // рендер карты — choropleth
+  function renderMap(year){
+    if(!geojson) return;
+    const mapY = dataByYear.get(year) || new Map();
+
+    // для домена цветовой шкалы берём положительные значения (min>0)
+    const values = [];
+    for(const v of mapY.values()) if(Number.isFinite(v) && v>0) values.push(v);
+    const minVal = d3.min(values) || 0;
+    const maxVal = d3.max(values) || 1;
+    const color = d3.scaleSequential(t => d3.interpolateBlues(t)).domain([Math.log(minVal+1), Math.log(maxVal+1)]);
+
+    // подготовка размеров
+    const bbox = {width:800, height:420};
+    const projection = d3.geoNaturalEarth1().fitSize([bbox.width, bbox.height], geojson);
+    const path = d3.geoPath(projection);
+
+    mapSvg.selectAll("*").remove();
+    // defs gradient legend
+    const defs = mapSvg.append("defs");
+    // draw countries
+    mapSvg.append("g")
+      .selectAll("path")
+      .data(geojson.features)
+      .join("path")
+      .attr("d", path)
+      .attr("stroke", "rgba(0,0,0,0.25)")
+      .attr("stroke-width", 0.3)
+      .attr("fill", f=>{
+        // ищем ISO3 код в разных местах
+        const props = f.properties || {};
+        const isoCandidates = [props.ISO_A3, props.iso_a3, props.iso3, props.ISO3, props.id, props.ADM0_A3, props.iso3_a2].filter(Boolean);
+        const iso = (isoCandidates[0] || "").toString().toUpperCase();
+        const val = mapY.get(iso);
+        if(Number.isFinite(val) && val>0) return color(Math.log(val+1));
+        return "#0f1720"; // фон для отсутствующих
+      })
+      .on("mousemove", (event, f)=>{
+        const props = f.properties || {};
+        const iso = (props.ISO_A3 || props.iso_a3 || props.iso3 || props.ADM0_A3 || props.id || "").toString().toUpperCase();
+        const name = props.ADMIN || props.NAME || props.name || countryLookup.get(iso) || "—";
+        const val = dataByYear.get(year)?.get(iso);
+        tooltip.style("display","block")
+          .style("left", (event.pageX + 12) + "px")
+          .style("top", (event.pageY + 12) + "px")
+          .html(`<strong>${name}</strong><div style="margin-top:4px">${iso} — ${Number.isFinite(val)?fmt(val):"нет данных"}</div>`);
+      })
+      .on("mouseout", ()=> tooltip.style("display","none"))
+      .on("click", (event,f)=>{
+        const props = f.properties || {};
+        const iso = (props.ISO_A3 || props.iso_a3 || props.iso3 || props.ADM0_A3 || props.id || "").toString().toUpperCase();
+        onCountryClick(iso);
+      });
+
+    // легенда: простая полоска
+    const legendW = 240, legendH = 12;
+    const legendX = 12, legendY = bbox.height - 20;
+    const legend = mapSvg.append("g").attr("transform", `translate(${legendX}, ${legendY})`);
+    const gradientId = "grad1";
+    defs.append("linearGradient").attr("id", gradientId).attr("x1","0%").attr("x2","100%")
+      .selectAll("stop")
+      .data(d3.range(0,1.001,0.05))
+      .join("stop")
+      .attr("offset", d=> (d*100)+"%")
+      .attr("stop-color", d=> d3.interpolateBlues(d));
+
+    legend.append("rect").attr("width", legendW).attr("height", legendH).attr("fill", `url(#${gradientId})`).attr("stroke","rgba(255,255,255,0.03)");
+    // legend ticks
+    const ticks = [minVal, Math.round((minVal+maxVal)/2), maxVal].map(v => Math.round(v));
+    legend.append("g").attr("transform", `translate(0, ${legendH+4})`)
+      .selectAll("text").data(ticks).join("text")
+      .attr("x", (d,i)=> i===0?0 : i===1?legendW/2:legendW)
+      .attr("text-anchor", (d,i)=> i===0?"start":i===2?"end":"middle")
+      .attr("fill","var(--muted)")
+      .text(d=>fmt(d));
+  }
+
+  // обработчики UI
+  yearRange.addEventListener("input", ()=> updateAll());
+  countrySearch.addEventListener("input", ()=>{
+    const q = countrySearch.value.trim().toLowerCase();
+    if(!q){ renderTable(+yearRange.value); return; }
+    // фильтр таблицы по подстроке в имени или коде
+    const mapY = dataByYear.get(+yearRange.value) || new Map();
+    const matched = [];
+    for(const [code,name] of countryLookup.entries()){
+      if((name||"").toLowerCase().includes(q) || (code||"").toLowerCase().includes(q)){
+        matched.push({code, name, value: mapY.get(code)});
+      }
+    }
+    matched.sort((a,b)=> (Number.isFinite(b.value)?b.value: -Infinity) - (Number.isFinite(a.value)?a.value:-Infinity) );
+    tableWrap.innerHTML = "";
+    const table = document.createElement("table");
+    table.innerHTML = `<thead><tr><th>#</th><th>Страна</th><th>Код</th><th style="text-align:right">Значение</th></tr></thead>`;
+    const tb = document.createElement("tbody");
+    matched.forEach((d,i)=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${i+1}</td><td>${d.name}</td><td>${d.code}</td><td style="text-align:right">${Number.isFinite(d.value)?fmt(d.value):"-"}</td>`;
+      tb.appendChild(tr);
+    });
+    table.appendChild(tb);
+    tableWrap.appendChild(table);
+  });
+
+  resetBtn.addEventListener("click", ()=>{
+    countrySearch.value = "";
+    yearRange.value = yearRange.max;
+    updateAll();
+  });
+
+  top10Btn.addEventListener("click", ()=>{
+    const year = +yearRange.value;
+    const mapY = dataByYear.get(year) || new Map();
+    const arr = Array.from(mapY.entries()).map(([code,val])=>({code, val: Number.isFinite(val)?val:0}));
+    arr.sort((a,b)=>b.val-a.val);
+    const top = arr.slice(0,10).map(d=>d.code).join(", ");
+    alert("Top 10 (codes):\n" + top);
+  });
+
+  // сначала попробуем автозагрузку CSV; если не получилось — ждём ручную загрузку.
+  const ok = await tryAutoLoad();
+  if(!ok){
+    // ничего не делаем — ждём, пока пользователь загрузит CSV через input
+  } else {
+    // если автоуспел, то кнопка reload перезагрузит страницу
+  }
+
+})();
+</script>
+</body>
+</html>
